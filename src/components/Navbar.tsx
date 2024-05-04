@@ -9,13 +9,17 @@ import {
 import { getKindeServerSession } from '@kinde-oss/kinde-auth-nextjs/server';
 
 import { Button } from './ui/button';
+import { UserNav } from './UserNav';
 
 type Props = {};
 
 export const Navbar = async (props: Props) => {
-  const { isAuthenticated: isAuthenticatedWithKinde } = getKindeServerSession();
+  const { isAuthenticated: isAuthenticatedWithKinde, getUser } =
+    getKindeServerSession();
 
   const isAuthenticated = await isAuthenticatedWithKinde();
+
+  const user = await getUser();
 
   return (
     <div className='flex items-center border-b h-[60px]'>
@@ -36,11 +40,15 @@ export const Navbar = async (props: Props) => {
               </RegisterLink>
             </>
           ) : (
-            <LogoutLink>
-              <Button size={'sm'} variant={'outline'}>
-                Logout
-              </Button>
-            </LogoutLink>
+            <>
+              <UserNav
+                {...{
+                  name: user?.given_name || '',
+                  email: user?.email || '',
+                  image: user?.picture || '',
+                }}
+              />
+            </>
           )}
 
           <ThemeToggle />
