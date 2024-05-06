@@ -1,6 +1,16 @@
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import prisma from '@/lib/db';
+import { getStripeCheckoutSession, stripe } from '@/lib/stripe';
+import { getKindeServerSession } from '@kinde-oss/kinde-auth-nextjs/server';
 import { CheckCircle2 } from 'lucide-react';
+import { redirect } from 'next/navigation';
 import React from 'react';
 
 type Props = {};
@@ -13,7 +23,93 @@ const featureItems = [
   { name: 'Lorem ipsum something' },
 ];
 
-const BillingPage = (props: Props) => {
+const getData = async (userId: string) => {
+  const data = await prisma.subscription.findUnique({
+    where: {
+      userId,
+    },
+    select: {
+      status: true,
+      user: {
+        select: {
+          stripeCustomerId: true,
+        },
+      },
+    },
+  });
+
+  return data;
+};
+
+const BillingPage = async (props: Props) => {
+  const { getUser } = getKindeServerSession();
+  const user = await getUser();
+  const data = await getData(user?.id!);
+
+  const createCheckoutSession = async () => {
+    'use server';
+
+    const dbUser = await prisma.user.findUnique({
+      where: {
+        id: user?.id,
+      },
+      select: {
+        stripeCustomerId: true,
+      },
+    });
+
+    if (!dbUser.stripeCustomerId) {
+      throw new Error('Stripe customer ID not found');
+    }
+
+    const subscriptionUrl = await getStripeCheckoutSession({
+      customerId: dbUser.stripeCustomerId,
+      domainUrl: 'http://localhost:3000',
+      priceId: process.env.STRIPE_SUBSCRIPTION_PRICE_ID!,
+    });
+
+    return redirect(subscriptionUrl);
+  };
+
+  const createCustomerPortal = async () => {
+    'use server';
+
+    const portalUrl = await stripe.billingPortal.sessions.create({
+      customer: data.user.stripeCustomerId,
+      return_url: 'http://localhost:3000/dashboard',
+    });
+
+    return redirect(portalUrl.url);
+  };
+
+  if (data.status === 'active') {
+    return (
+      <div className='grid items-start gap-8'>
+        <div className='flex items-center justify-between px-2'>
+          <div className='grid gap-1'>
+            <h1 className='text-3xl md:text-4xl font-bold'>Subscription</h1>
+            <p className='text-lg text-muted-foreground'>
+              Your current subscription
+            </p>
+          </div>
+        </div>
+        <Card className='w-full'>
+          <CardHeader>
+            <CardTitle>Edit subscription</CardTitle>
+            <CardDescription>
+              Click on the button below to change your payment detail.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form action={createCustomerPortal}>
+              <Button>View payment details</Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className='flex flex-col'>
       <div className='flex items-center justify-between px-2'>
@@ -49,10 +145,10 @@ const BillingPage = (props: Props) => {
                 </li>
               ))}
             </ul>
+            <form className='w-full' action={createCheckoutSession}>
+              <Button className='w-full'>Subscribe</Button>
+            </form>
           </div>
-          <form className='w-full'>
-            <Button className='w-full'>Subscribe</Button>
-          </form>
         </Card>
       </div>
     </div>

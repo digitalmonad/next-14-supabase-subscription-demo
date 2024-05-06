@@ -3,6 +3,7 @@ import { DashboardNav } from './DashboardNav';
 import { getKindeServerSession } from '@kinde-oss/kinde-auth-nextjs/server';
 import { redirect } from 'next/navigation';
 import prisma from '@/lib/db';
+import { stripe } from '@/lib/stripe';
 
 const createUserIfNotExist = async ({
   email,
@@ -24,6 +25,7 @@ const createUserIfNotExist = async ({
     select: {
       id: true,
       stripeCustomerId: true,
+      email: true,
     },
   });
 
@@ -34,6 +36,21 @@ const createUserIfNotExist = async ({
         email,
         name: firstName + ' ' + lastName,
         profileImage,
+      },
+    });
+  }
+
+  if (!user?.stripeCustomerId) {
+    const stripeCustomer = await stripe.customers.create({
+      email: email!,
+    });
+
+    await prisma.user.update({
+      where: {
+        id,
+      },
+      data: {
+        stripeCustomerId: stripeCustomer.id,
       },
     });
   }
